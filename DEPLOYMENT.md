@@ -1,327 +1,237 @@
 # Deployment Guide
 
-This guide covers various deployment options for the CI/CD Demo application.
+## Quick Deployment Options
 
-## 🚀 Quick Deployment Options
-
-### 1. Docker Compose (Recommended for Development)
+### Docker Compose (Development)
 
 ```bash
-# Clone and setup
 git clone <repository-url>
 cd cicd-demo
 cp .env.example .env
-
-# Start all services
 docker-compose up -d
-
-# Access the application
-open http://localhost:5000
 ```
 
-### 2. Render.com (Recommended for Production)
+### Render.com (Production)
 
-1. **Create Render Account**
-   - Sign up at [render.com](https://render.com)
-   - Connect your GitHub repository
+1. Create PostgreSQL service
+2. Create web service with Docker runtime
+3. Configure environment variables
+4. Deploy
 
-2. **Create Web Service**
-   - Click "New +" → "Web Service"
-   - Connect your repository
-   - Use the following settings:
-     - **Runtime**: Docker
-     - **Build Command**: `docker build -t cicd-demo .`
-     - **Start Command**: `gunicorn --bind 0.0.0.0:5000 --workers 2 app.main:app`
+## Environment Configuration
 
-3. **Add Environment Variables**
-   ```
-   ENVIRONMENT=production
-   DATABASE_URL=postgresql://...
-   ENABLE_METRICS=true
-   SECRET_KEY=your-secret-key
-   ```
-
-4. **Create PostgreSQL Database**
-   - Click "New +" → "PostgreSQL"
-   - Use the connection string in your web service
-
-5. **Deploy**
-   - Push to `main` branch for automatic deployment
-
-### 3. Manual Docker Deployment
+### Required Variables
 
 ```bash
-# Build the image
-docker build -t cicd-demo .
-
-# Run with PostgreSQL
-docker run -d --name postgres \
-  -e POSTGRES_DB=cicd_demo \
-  -e POSTGRES_USER=cicd_demo_user \
-  -e POSTGRES_PASSWORD=secure_password \
-  -p 5432:5432 postgres:15
-
-# Run the application
-docker run -d --name cicd-demo \
-  --link postgres \
-  -e DATABASE_URL=postgresql://cicd_demo_user:secure_password@postgres:5432/cicd_demo \
-  -e ENABLE_METRICS=true \
-  -p 5000:5000 cicd-demo
+DATABASE_URL=postgresql://user:pass@host:5432/database
+ENVIRONMENT=staging|production
+ENABLE_METRICS=true
+SECRET_KEY=<generated-secret-key>
 ```
 
-## 🔧 Production Configuration
+### Generate Secret Keys
+
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+## Render.com Setup
+
+### Database Service
+
+1. Create PostgreSQL service
+2. Note connection string
+3. Use for both staging and production
+
+### Web Services
+
+#### Staging
+- Name: cicd-demo-staging
+- Runtime: Docker
+- Branch: develop
+- Auto-deploy: enabled
+
+#### Production
+- Name: cicd-demo-production
+- Runtime: Docker
+- Branch: main
+- Auto-deploy: disabled (manual)
 
 ### Environment Variables
 
-Create a `.env.production` file with:
-
-```bash
-# Production Settings
-ENVIRONMENT=production
-FLASK_ENV=production
-DEBUG=false
-
-# Database (use Render PostgreSQL or your own)
-DATABASE_URL=postgresql://user:password@host:5432/database
-
-# Security
-SECRET_KEY=your-very-secure-secret-key-here
-
-# Metrics
+#### Staging
+```
+DATABASE_URL=<postgresql-connection-string>
+ENVIRONMENT=staging
 ENABLE_METRICS=true
-
-# Logging
-LOG_LEVEL=WARNING
+SECRET_KEY=<staging-key>
 ```
 
-### Production Docker Compose
+#### Production
+```
+DATABASE_URL=<postgresql-connection-string>
+ENVIRONMENT=production
+ENABLE_METRICS=true
+SECRET_KEY=<production-key>
+```
 
-Use `docker-compose.prod.yml` for production:
+## Production Docker Deployment
+
+### Environment Setup
 
 ```bash
-# Set required environment variables
-export DB_PASSWORD=your-secure-password
-export SECRET_KEY=your-secret-key
-export GRAFANA_PASSWORD=your-grafana-password
+cp .env.example .env.production
+# Edit with production values
+```
 
-# Deploy production stack
+### Deploy
+
+```bash
 docker-compose -f docker-compose.prod.yml up -d
 ```
 
-This includes:
-- **Application** with health checks
-- **PostgreSQL** database with persistence
-- **Nginx** reverse proxy with SSL support
-- **Prometheus** metrics collection
-- **Grafana** visualization dashboard
+### Services Included
 
-## 🔒 Security Considerations
+- Application (port 5000)
+- PostgreSQL (port 5432)
+- Nginx reverse proxy (ports 80, 443)
+- Prometheus (port 9090)
+- Grafana (port 3000)
 
-### SSL/TLS Setup
+## CI/CD Pipeline
 
-1. **Generate SSL certificates** (for production):
-   ```bash
-   # Use Let's Encrypt or your organization's certificates
-   openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-     -keyout ssl/key.pem -out ssl/cert.pem
-   ```
+### GitHub Actions Configuration
 
-2. **Update Nginx configuration**:
-   ```nginx
-   server {
-       listen 443 ssl http2;
-       server_name your-domain.com;
-       
-       ssl_certificate /etc/nginx/ssl/cert.pem;
-       ssl_certificate_key /etc/nginx/ssl/key.pem;
-       # ... rest of SSL config
-   }
-   ```
+Required secrets in GitHub repository:
 
-### Security Headers
-
-The Nginx configuration includes:
-- X-Frame-Options: DENY
-- X-Content-Type-Options: nosniff
-- X-XSS-Protection: "1; mode=block"
-- Strict-Transport-Security (when SSL is enabled)
-
-### Rate Limiting
-
-API endpoints are rate-limited:
-- `/api/*`: 10 requests/second
-- Dashboard: 5 requests/second
-- Health checks: No rate limiting
-
-## 📊 Monitoring Setup
-
-### Prometheus Configuration
-
-1. **Access Prometheus**: `http://localhost:9090`
-2. **Key metrics to monitor**:
-   - `flask_http_request_total`
-   - `flask_http_request_duration_seconds`
-   - `deployment_total`
-   - `deployment_success_rate`
-
-### Grafana Dashboard
-
-1. **Access Grafana**: `http://localhost:3000`
-2. **Login**: admin/admin (change immediately)
-3. **Import dashboards** from `monitoring/grafana/`
-
-### Alerting
-
-Alerts are configured in `monitoring/alerts.yml`:
-- Application downtime
-- High error rates
-- Performance degradation
-- Database connection issues
-
-Set up alert notifications in `prometheus.yml`:
-
-```yaml
-alerting:
-  alertmanagers:
-    - static_configs:
-        - targets:
-          - alertmanager:9093
+```
+RENDER_STAGING_DEPLOY_HOOK=https://api.render.com/deploy/srv-<id>/key
+RENDER_PROD_DEPLOY_HOOK=https://api.render.com/deploy/srv-<id>/key
+APPROVERS=<github-username>
 ```
 
-## 🔄 CI/CD Pipeline
+### Deploy Hooks
 
-### GitHub Actions
-
-The pipeline includes:
-
-1. **Build & Test**
-   - Python 3.11 setup
-   - Dependency installation
-   - Unit and integration tests
-   - Coverage reporting
-
-2. **Security Scanning**
-   - Bandit SAST scanning
-   - Safety dependency checks
-   - Trivy container scanning
-
-3. **Performance Testing**
-   - Locust load testing
-   - Performance benchmarks
-
-4. **Deployment**
-   - Docker image build
-   - Staging deployment (develop branch)
-   - Production deployment (main branch with approval)
+1. Go to Render service settings
+2. Find "Deploy Hooks" section
+3. Copy webhook URLs
+4. Add to GitHub Secrets
 
 ### Branch Strategy
 
-- **`main`**: Production deployments
-- **`develop`**: Staging deployments
-- **feature/***: Feature branches (no deployment)
+- `main` → Production deployment
+- `develop` → Staging deployment
+- Manual approval required for production
 
-### Deployment Secrets
+## Monitoring
 
-Configure these in GitHub repository settings:
+### Prometheus
 
+- URL: http://localhost:9090
+- Metrics endpoint: /metrics
+- Key metrics: flask_http_request_total, deployment_total
+
+### Grafana
+
+- URL: http://localhost:3000
+- Default credentials: admin/admin
+- Dashboards: pre-configured
+
+### Alerting
+
+Alerts configured in monitoring/alerts.yml:
+- Application down
+- High error rate
+- Performance issues
+
+## Troubleshooting
+
+### Database Connection
+
+```bash
+python3 scripts/simple_db_test.py
 ```
-RENDER_STAGING_DEPLOY_HOOK=https://api.render.com/deploy/srv-xxxxx/key
-RENDER_PROD_DEPLOY_HOOK=https://api.render.com/deploy/srv-yyyy/key
-APPROVERS=your-github-username
+
+### Application Health
+
+```bash
+curl http://localhost:5000/health
 ```
 
-## 🐛 Troubleshooting
+### Check Logs
 
-### Common Issues
+```bash
+docker-compose logs app
+```
 
-1. **Database Connection Failed**
-   ```bash
-   # Check PostgreSQL status
-   docker-compose ps postgres
-   
-   # Check logs
-   docker-compose logs postgres
-   
-   # Test connection
-   docker-compose exec app python -c "from app.database import db; print(db.engine.execute('SELECT 1').scalar())"
-   ```
+### Render Deployment Issues
 
-2. **Application Not Starting**
-   ```bash
-   # Check application logs
-   docker-compose logs app
-   
-   # Check health endpoint
-   curl http://localhost:5000/health
-   ```
+1. Check environment variables
+2. Verify database connection
+3. Review deployment logs
+4. Test health endpoint
 
-3. **High Memory Usage**
-   ```bash
-   # Monitor resource usage
-   docker stats
-   
-   # Restart services if needed
-   docker-compose restart app
-   ```
+## Security Considerations
 
-4. **Metrics Not Available**
-   ```bash
-   # Check if metrics are enabled
-   curl http://localhost:5000/metrics
-   
-   # Verify Prometheus configuration
-   curl http://localhost:9090/targets
-   ```
+### SSL/TLS
 
-### Performance Issues
+1. Generate SSL certificates
+2. Update nginx.conf
+3. Configure HTTPS
 
-1. **Slow Database Queries**
-   - Check PostgreSQL logs
-   - Monitor connection pool
-   - Consider adding indexes
+### Rate Limiting
 
-2. **High Response Times**
-   - Check application logs
-   - Monitor CPU/memory usage
-   - Scale horizontally if needed
+API endpoints rate-limited:
+- `/api/*`: 10 requests/second
+- Dashboard: 5 requests/second
 
-3. **Load Test Failures**
-   - Reduce concurrent users
-   - Check resource limits
-   - Optimize database queries
+### Security Headers
 
-## 📈 Scaling
+- X-Frame-Options: DENY
+- X-Content-Type-Options: nosniff
+- X-XSS-Protection: "1; mode=block"
 
-### Horizontal Scaling
+## Performance
+
+### Scaling
 
 ```bash
 # Scale application containers
 docker-compose up -d --scale app=3
-
-# Use load balancer (Nginx handles this automatically)
 ```
 
-### Database Scaling
+### Database Optimization
 
-- **Read replicas**: Set up PostgreSQL read replicas
-- **Connection pooling**: Use PgBouncer for connection management
-- **Caching**: Add Redis for application caching
+- Connection pooling
+- Query optimization
+- Indexing
 
-### Monitoring Scaling
+### Monitoring
 
-- **Prometheus**: Add remote write for long-term storage
-- **Grafana**: Configure persistent storage
-- **Alerting**: Set up multiple alert managers
+- Response time tracking
+- Error rate monitoring
+- Resource usage metrics
 
-## 🔄 Updates and Maintenance
+## Backup and Recovery
 
-### Application Updates
+### Database Backup
 
 ```bash
-# Pull latest code
-git pull origin main
+docker-compose exec postgres pg_dump -U cicd_demo_user cicd_demo > backup.sql
+```
 
-# Rebuild and restart
+### Grafana Backup
+
+```bash
+docker cp $(docker-compose ps -q grafana):/var/lib/grafana ./grafana-backup
+```
+
+## Maintenance
+
+### Updates
+
+```bash
+git pull origin main
 docker-compose build
 docker-compose up -d
 ```
@@ -329,31 +239,12 @@ docker-compose up -d
 ### Database Migrations
 
 ```bash
-# Run migrations (if using Flask-Migrate)
 docker-compose exec app flask db upgrade
 ```
 
-### Backup Strategy
+### Log Rotation
 
-```bash
-# Database backup
-docker-compose exec postgres pg_dump -U cicd_demo_user cicd_demo > backup.sql
-
-# Grafana dashboards backup
-docker cp $(docker-compose ps -q grafana):/var/lib/grafana ./grafana-backup
-```
-
-## 📞 Support
-
-For deployment issues:
-
-1. Check the troubleshooting section
-2. Review application logs
-3. Verify environment variables
-4. Test individual components
-
-For production deployments, consider:
-- Setting up log aggregation
-- Configuring backup monitoring
-- Implementing disaster recovery
-- Regular security updates
+Configure log rotation for production:
+- Application logs
+- Nginx access logs
+- Database logs
