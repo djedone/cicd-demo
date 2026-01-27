@@ -1,0 +1,25 @@
+# docker-compose.yml
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: cicd_demo
+      POSTGRES_USER: cicd_demo_user
+      POSTGRES_PASSWORD: localpass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  app:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      DATABASE_URL: postgresql://cicd_demo_user:localpass@postgres:5432/cicd_demo
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:

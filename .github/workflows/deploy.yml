@@ -1,0 +1,38 @@
+# .github/workflows/deploy.yml
+name: Deploy to Environments
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+
+jobs:
+  deploy-staging:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Deploy to Staging
+        run: |
+          echo "Deploying to staging environment..."
+          # Ovdje možeš dodati curl za Render deploy hook
+          # ili koristiti Render CLI
+          curl -X POST ${{ secrets.RENDER_STAGING_DEPLOY_HOOK }}
+
+  deploy-production:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    needs: [deploy-staging]
+    steps:
+      - name: Manual Approval
+        uses: trstringer/manual-approval@v1
+        with:
+          secret: ${{ github.TOKEN }}
+          approvers: ${{ secrets.APPROVERS }}
+          
+      - name: Deploy to Production
+        run: |
+          echo "Deploying to production environment..."
+          curl -X POST ${{ secrets.RENDER_PROD_DEPLOY_HOOK }}

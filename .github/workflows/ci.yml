@@ -1,13 +1,33 @@
-name: CI/CD Demo Pipeline
+# .github/workflows/ci.yml
+name: CI/CD Pipeline with Security
 
 on:
   push:
+    branches:
+      - main
+      - develop
+  pull_request:
     branches:
       - main
 
 jobs:
   ci:
     runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: cicd_demo_test
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_pass
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
 
     steps:
       # 1. Checkout source code
@@ -20,27 +40,57 @@ jobs:
         with:
           python-version: "3.11"
 
-      # 3. Install application dependencies
+      # 3. Install dependencies
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # 4. Run automated functional tests
-      - name: Run automated tests
-        run: python -m pytest
+      # 4. Run security checks
+      - name: Run Bandit SAST
+        run: |
+          pip install bandit
+          bandit -r app/ -f json -o bandit-report.json || true
 
-      # 5. Build Docker image
+      - name: Run Safety dependency check
+        run: |
+          pip install safety
+          safety check --json --output safety-report.json || true
+
+      # 5. Run automated functional tests
+      - name: Run automated tests
+        env:
+          DATABASE_URL: postgresql://test_user:test_pass@localhost:5432/cicd_demo_test
+        run: |
+          python -m pytest --cov=app --cov-report=xml
+
+      # 6. Upload coverage to Codecov
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: unittests
+
+      # 7. Build Docker image
       - name: Build Docker image
         run: |
-          docker build -t cicd-demo .
+          docker build -t cicd-demo:${{ github.sha }} .
 
-      # 6. Security scan of Docker image (DevSecOps)
+      # 8. Security scan of Docker image
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: cicd-demo
+          image-ref: cicd-demo:${{ github.sha }}
           severity: CRITICAL
-          scanners: vuln 
-          ignore-unfixed: true 
+          scanners: vuln
+          ignore-unfixed: true
           exit-code: 1
+
+      # 9. Run performance tests (Locust)
+      - name: Run performance tests
+        run: |
+          pip install locust
+          # Start app in background and run basic load test
+          python -m app.main &
+          sleep 10
+          locust --headless -u 10 -r 1 --run-time 30s --host=http://localhost:5000 || true
