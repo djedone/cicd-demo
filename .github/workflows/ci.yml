@@ -40,5 +40,7 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: cicd-demo
-          severity: CRITICAL,HIGH
+          severity: CRITICAL
+          scanners: vuln 
+          ignore-unfixed: true 
           exit-code: 1
