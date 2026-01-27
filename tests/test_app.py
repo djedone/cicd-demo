@@ -1,6 +1,6 @@
 import pytest
 from app.main import create_app
-from app.database import db
+from app.database import db, init_db
 import json
 
 @pytest.fixture
@@ -11,6 +11,8 @@ def app():
     
     with test_app.app_context():
         db.create_all()
+        # Initialize database to ensure tables are created
+        init_db()
         yield test_app
         db.session.remove()
         db.drop_all()

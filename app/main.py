@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request, render_template
 from app.database import db, init_db
+from app.models import DeploymentLog
 import os
 import logging
 from datetime import datetime
@@ -101,13 +102,18 @@ def create_app(testing=False):
     def deployments():
         """API za deployment logove"""
         if request.method == "POST":
-            data = request.get_json()
+            try:
+                data = request.get_json()
+                if data is None:
+                    return jsonify({"error": "Invalid JSON"}), 400
+            except Exception as e:
+                return jsonify({"error": "Invalid JSON"}), 400
+                
             version = data.get('version', 'unknown')
             environment = data.get('environment', 'unknown')
             
             # Spremi deployment u bazu
             try:
-                from app.models import DeploymentLog
                 log = DeploymentLog(
                     version=version,
                     environment=environment,
@@ -135,7 +141,6 @@ def create_app(testing=False):
         
         # GET method - vrati sve deployment logove
         try:
-            from app.models import DeploymentLog
             logs = DeploymentLog.query.order_by(DeploymentLog.deployed_at.desc()).limit(10).all()
             
             return jsonify({
@@ -164,7 +169,6 @@ def create_app(testing=False):
     def stats():
         """Custom statistike za dashboard"""
         try:
-            from app.models import DeploymentLog
             from sqlalchemy import func
             
             total_deployments = DeploymentLog.query.count()
@@ -184,7 +188,6 @@ def create_app(testing=False):
     def custom_metrics():
         """Custom deployment metrics for dashboard"""
         try:
-            from app.models import DeploymentLog
             from sqlalchemy import func, extract
             from datetime import datetime, timedelta
             
@@ -201,11 +204,24 @@ def create_app(testing=False):
             # Deployments by environment
             env_stats = db.session.query(
                 DeploymentLog.environment,
-                func.count(DeploymentLog.id).label('count'),
-                func.sum(func.case([(DeploymentLog.status == 'success', 1)], else_=0)).label('successful')
+                func.count(DeploymentLog.id).label('count')
             ).filter(
                 DeploymentLog.deployed_at >= thirty_days_ago
             ).group_by(DeploymentLog.environment).all()
+            
+            # Calculate successful deployments for each environment
+            env_data = []
+            for env, count in env_stats:
+                successful = DeploymentLog.query.filter(
+                    DeploymentLog.environment == env,
+                    DeploymentLog.status == 'success',
+                    DeploymentLog.deployed_at >= thirty_days_ago
+                ).count()
+                env_data.append({
+                    'environment': env,
+                    'total': count,
+                    'successful': successful
+                })
             
             # Deployments by day (last 7 days)
             seven_days_ago = datetime.utcnow() - timedelta(days=7)
@@ -224,11 +240,11 @@ def create_app(testing=False):
                     "avg_deployments_per_day": total_recent / 30
                 },
                 "by_environment": [{
-                    "environment": env,
-                    "total": count,
-                    "successful": successful,
-                    "success_rate": (successful / count * 100) if count > 0 else 0
-                } for env, count, successful in env_stats],
+                    "environment": env['environment'],
+                    "total": env['total'],
+                    "successful": env['successful'],
+                    "success_rate": (env['successful'] / env['total'] * 100) if env['total'] > 0 else 0
+                } for env in env_data],
                 "daily_deployments": [{
                     "date": str(date),
                     "count": count
