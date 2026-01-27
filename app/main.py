@@ -142,7 +142,9 @@ def create_app(testing=False):
         
         # GET method - vrati sve deployment logove
         try:
-            logs = DeploymentLog.query.order_by(DeploymentLog.deployed_at.desc()).limit(10).all()
+            # Filter by environment
+            current_env = os.getenv('ENVIRONMENT', 'development')
+            logs = DeploymentLog.query.filter_by(environment=current_env).order_by(DeploymentLog.deployed_at.desc()).limit(10).all()
             
             return jsonify({
                 "deployments": [{
@@ -172,8 +174,10 @@ def create_app(testing=False):
         try:
             from sqlalchemy import func
             
-            total_deployments = DeploymentLog.query.count()
-            successful_deployments = DeploymentLog.query.filter_by(status="success").count()
+            # Filter by environment
+            current_env = os.getenv('ENVIRONMENT', 'development')
+            total_deployments = DeploymentLog.query.filter_by(environment=current_env).count()
+            successful_deployments = DeploymentLog.query.filter_by(environment=current_env, status="success").count()
             
             return jsonify({
                 "total_deployments": total_deployments,
@@ -194,8 +198,10 @@ def create_app(testing=False):
             
             # Get deployments from last 30 days
             thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+            current_env = os.getenv('ENVIRONMENT', 'development')
             recent_deployments = DeploymentLog.query.filter(
-                DeploymentLog.deployed_at >= thirty_days_ago
+                DeploymentLog.deployed_at >= thirty_days_ago,
+                DeploymentLog.environment == current_env
             ).all()
             
             # Calculate metrics
@@ -207,7 +213,8 @@ def create_app(testing=False):
                 DeploymentLog.environment,
                 func.count(DeploymentLog.id).label('count')
             ).filter(
-                DeploymentLog.deployed_at >= thirty_days_ago
+                DeploymentLog.deployed_at >= thirty_days_ago,
+                DeploymentLog.environment == current_env
             ).group_by(DeploymentLog.environment).all()
             
             # Calculate successful deployments for each environment
@@ -230,7 +237,8 @@ def create_app(testing=False):
                 func.date(DeploymentLog.deployed_at).label('date'),
                 func.count(DeploymentLog.id).label('count')
             ).filter(
-                DeploymentLog.deployed_at >= seven_days_ago
+                DeploymentLog.deployed_at >= seven_days_ago,
+                DeploymentLog.environment == current_env
             ).group_by(func.date(DeploymentLog.deployed_at)).all()
             
             return jsonify({
