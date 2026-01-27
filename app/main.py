@@ -81,7 +81,8 @@ def create_app(testing=False):
         """Health check endpoint"""
         try:
             # Proveri konekciju sa bazom
-            db.session.execute("SELECT 1")
+            from sqlalchemy import text
+            db.session.execute(text("SELECT 1"))
             db_status = "healthy"
         except Exception as e:
             logger.error(f"Database health check failed: {e}")
