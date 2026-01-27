@@ -1,21 +1,49 @@
-name: CI Pipeline
+name: CI/CD Demo
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
 
 jobs:
-  build-and-test:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+      # 1️⃣ Checkout repo
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Build Docker image
-      run: docker build -t cicd-demo .
+      # 2️⃣ Set up Python (za test sanity check)
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
 
-    - name: Run container test
-      run: |
-        docker run -d -p 5000:5000 cicd-demo
-        sleep 5
-        curl http://localhost:5000
+      # 3️⃣ Install dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # 4️⃣ Build Docker image
+      - name: Build Docker image
+        run: docker build -t cicd-demo .
+
+      # 5️⃣ Run container for sanity check
+      - name: Run container for tests
+        run: |
+          docker run -d --name cicd-demo-test -p 5000:5000 cicd-demo
+          sleep 5  # da Flask starta
+          curl -f http://localhost:5000 || exit 1
+        # Ako curl ne vrati 200, workflow faila
+
+      # 6️⃣ Stop & remove test container
+      - name: Cleanup
+        run: |
+          docker stop cicd-demo-test
+          docker rm cicd-demo-test
+
+      # 7️⃣ Deploy step (Render)
+      # Render automatski rebuilda Dockerfile ako je Web Service povezan s GitHub
+      # Ako želiš push direktno, možemo dodati API token i curl deploy
