@@ -1,10 +1,10 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template  # DODAJ render_template
 
 app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "CI/CD Cloud Demo - OK"
+    return render_template("index.html")  # OVO ĆE PRIKAZATI TVOJ HTML
 
 @app.route("/health")
 def health():
