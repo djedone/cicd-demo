@@ -28,8 +28,7 @@ jobs:
 
       # 4. Run automated functional tests
       - name: Run automated tests
-        run: |
-          pytest
+        run: python -m pytest
 
       # 5. Build Docker image
       - name: Build Docker image
