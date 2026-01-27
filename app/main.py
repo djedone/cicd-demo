@@ -1,81 +1,248 @@
-# app/main.py
+from flask import Flask, jsonify, request, render_template
+from app.database import db, init_db
 import os
-from flask import Flask, jsonify, render_template, request
-from app.database import db
-from app.models import DeploymentLog
+import logging
+from datetime import datetime
 from prometheus_flask_exporter import PrometheusMetrics
+from prometheus_client import REGISTRY, CollectorRegistry
 
-def create_app():
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(name)s %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+metrics = None
+
+def create_app(testing=False):
+    """Application factory function"""
     app = Flask(__name__)
     
     # Konfiguracija
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///local.db')
+    if testing:
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+        app.config['TESTING'] = True
+    else:
+        app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///app.db')
+    
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     
-    # Inicijalizacija ekstenzija
+    # Inicijalizacija baze
     db.init_app(app)
     
-    # Inicijalizacija Prometheus metrika
-    metrics = PrometheusMetrics(app)
+    # Inicijalizacija metrika (samo ako nisu u testing modu)
+    global metrics
+    if os.getenv('ENABLE_METRICS', 'false').lower() == 'true' and not testing:
+        metrics = PrometheusMetrics(app)
+        # Custom metrike (registriraju se automatski kroz dekoratore)
+        
+        @metrics.counter(
+            'deployment_total',
+            'Total number of deployments',
+            labels={'environment': lambda: request.view_args.get('env', 'unknown')}
+        )
+        def record_deployment_counter():
+            pass  # Ovo je samo placeholder, pravo brojanje je u logici
     
-    # Custom metrika za broj deploymenta
-    deployments_counter = metrics.counter(
-        'deployments_total', 
-        'Total number of deployments',
-        labels={'status': lambda: request.status_code}
-    )
-    
+    @app.before_request
+    def initialize_database():
+        if app.config.get('TESTING'):
+            return
+        try:
+            with app.app_context():
+                init_db()
+        except Exception as e:
+            logger.error(f"Database initialization failed: {e}")
+            pass
+
+    @app.errorhandler(404)
+    def not_found(error):
+        logger.warning(f"404 error for {request.url}")
+        return jsonify({"error": "Not found", "message": str(error)}), 404
+
+    @app.errorhandler(500)
+    def internal_error(error):
+        logger.error(f"500 error: {error}")
+        return jsonify({"error": "Internal server error", "message": "Something went wrong"}), 500
+
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        logger.error(f"Unhandled exception: {e}", exc_info=True)
+        return jsonify({"error": "Internal server error", "message": "An unexpected error occurred"}), 500
+
     @app.route("/")
     def home():
         return render_template("index.html")
-    
+
     @app.route("/health")
     def health():
-        return jsonify(status="UP"), 200
-    
-    @app.route("/api/deployments", methods=["GET"])
-    def get_deployments():
-        deployments = DeploymentLog.query.order_by(DeploymentLog.deployed_at.desc()).limit(10).all()
-        return jsonify([d.to_dict() for d in deployments])
-    
-    @app.route("/api/deployments", methods=["POST"])
-    def create_deployment():
-        data = request.get_json()
-        deployment = DeploymentLog(
-            version=data.get('version', '1.0.0'),
-            status=data.get('status', 'success'),
-            user=data.get('user', 'system'),
-            commit_hash=data.get('commit_hash', ''),
-            environment=data.get('environment', 'production')
-        )
-        db.session.add(deployment)
-        db.session.commit()
-        return jsonify(deployment.to_dict()), 201
-    
+        """Health check endpoint"""
+        try:
+            # Proveri konekciju sa bazom
+            db.session.execute("SELECT 1")
+            db_status = "healthy"
+        except Exception as e:
+            logger.error(f"Database health check failed: {e}")
+            db_status = f"unhealthy: {str(e)}"
+        
+        health_data = {
+            "status": "UP",
+            "timestamp": datetime.utcnow().isoformat(),
+            "database": db_status,
+            "environment": os.getenv('ENVIRONMENT', 'development'),
+            "version": "1.0.0"
+        }
+        
+        logger.info(f"Health check: {health_data['status']}, Database: {db_status}")
+        return jsonify(health_data), 200
+
+    @app.route("/api/deployments", methods=["GET", "POST"])
+    def deployments():
+        """API za deployment logove"""
+        if request.method == "POST":
+            data = request.get_json()
+            version = data.get('version', 'unknown')
+            environment = data.get('environment', 'unknown')
+            
+            # Spremi deployment u bazu
+            try:
+                from app.models import DeploymentLog
+                log = DeploymentLog(
+                    version=version,
+                    environment=environment,
+                    status="success",
+                    deployed_at=datetime.utcnow()
+                )
+                db.session.add(log)
+                db.session.commit()
+                logger.info(f"Deployment recorded: {version} to {environment}")
+                
+                # Inkrementiraj metrike ako su omogućene
+                if metrics:
+                    from flask import current_app
+                    with current_app.test_request_context():
+                        record_deployment_counter()
+                
+                return jsonify({
+                    "message": "Deployment recorded",
+                    "version": version,
+                    "environment": environment
+                }), 201
+            except Exception as e:
+                logger.error(f"Failed to record deployment: {e}")
+                return jsonify({"error": str(e)}), 500
+        
+        # GET method - vrati sve deployment logove
+        try:
+            from app.models import DeploymentLog
+            logs = DeploymentLog.query.order_by(DeploymentLog.deployed_at.desc()).limit(10).all()
+            
+            return jsonify({
+                "deployments": [{
+                    "id": log.id,
+                    "version": log.version,
+                    "environment": log.environment,
+                    "status": log.status,
+                    "deployed_at": log.deployed_at.isoformat()
+                } for log in logs]
+            })
+        except Exception as e:
+            logger.error(f"Failed to retrieve deployments: {e}")
+            return jsonify({"error": str(e), "deployments": []})
+
     @app.route("/metrics")
     def metrics_endpoint():
-        # Ova ruta je automatski dodana od strane PrometheusFlaskExporter
-        pass
-    
+        """Prometheus metrics endpoint"""
+        if metrics:
+            from prometheus_client import generate_latest
+            from flask import Response
+            return Response(generate_latest(), mimetype='text/plain')
+        return "Metrics disabled", 404
+
+    @app.route("/api/stats")
+    def stats():
+        """Custom statistike za dashboard"""
+        try:
+            from app.models import DeploymentLog
+            from sqlalchemy import func
+            
+            total_deployments = DeploymentLog.query.count()
+            successful_deployments = DeploymentLog.query.filter_by(status="success").count()
+            
+            return jsonify({
+                "total_deployments": total_deployments,
+                "successful_deployments": successful_deployments,
+                "success_rate": (successful_deployments / total_deployments * 100) if total_deployments > 0 else 0,
+                "last_deployment": DeploymentLog.query.order_by(DeploymentLog.deployed_at.desc()).first().deployed_at.isoformat() if total_deployments > 0 else None
+            })
+        except Exception as e:
+            logger.error(f"Failed to generate stats: {e}")
+            return jsonify({"error": str(e)})
+
     @app.route("/api/metrics/custom")
     def custom_metrics():
-        total_deployments = DeploymentLog.query.count()
-        successful_deployments = DeploymentLog.query.filter_by(status='success').count()
-        failed_deployments = DeploymentLog.query.filter_by(status='failed').count()
-        
-        return jsonify({
-            'total_deployments': total_deployments,
-            'successful_deployments': successful_deployments,
-            'failed_deployments': failed_deployments,
-            'success_rate': successful_deployments / total_deployments if total_deployments > 0 else 0
-        })
-    
+        """Custom deployment metrics for dashboard"""
+        try:
+            from app.models import DeploymentLog
+            from sqlalchemy import func, extract
+            from datetime import datetime, timedelta
+            
+            # Get deployments from last 30 days
+            thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+            recent_deployments = DeploymentLog.query.filter(
+                DeploymentLog.deployed_at >= thirty_days_ago
+            ).all()
+            
+            # Calculate metrics
+            total_recent = len(recent_deployments)
+            successful_recent = len([d for d in recent_deployments if d.status == "success"])
+            
+            # Deployments by environment
+            env_stats = db.session.query(
+                DeploymentLog.environment,
+                func.count(DeploymentLog.id).label('count'),
+                func.sum(func.case([(DeploymentLog.status == 'success', 1)], else_=0)).label('successful')
+            ).filter(
+                DeploymentLog.deployed_at >= thirty_days_ago
+            ).group_by(DeploymentLog.environment).all()
+            
+            # Deployments by day (last 7 days)
+            seven_days_ago = datetime.utcnow() - timedelta(days=7)
+            daily_stats = db.session.query(
+                func.date(DeploymentLog.deployed_at).label('date'),
+                func.count(DeploymentLog.id).label('count')
+            ).filter(
+                DeploymentLog.deployed_at >= seven_days_ago
+            ).group_by(func.date(DeploymentLog.deployed_at)).all()
+            
+            return jsonify({
+                "summary": {
+                    "total_deployments_30d": total_recent,
+                    "successful_deployments_30d": successful_recent,
+                    "success_rate_30d": (successful_recent / total_recent * 100) if total_recent > 0 else 0,
+                    "avg_deployments_per_day": total_recent / 30
+                },
+                "by_environment": [{
+                    "environment": env,
+                    "total": count,
+                    "successful": successful,
+                    "success_rate": (successful / count * 100) if count > 0 else 0
+                } for env, count, successful in env_stats],
+                "daily_deployments": [{
+                    "date": str(date),
+                    "count": count
+                } for date, count in daily_stats],
+                "generated_at": datetime.utcnow().isoformat()
+            })
+        except Exception as e:
+            logger.error(f"Failed to generate custom metrics: {e}")
+            return jsonify({"error": str(e), "message": "Failed to generate custom metrics"})
+
     return app
 
-# Kreiraj aplikaciju
-app = create_app()
+# Create app instance for production
+app = create_app(testing=False)
 
 if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()  # Kreiraj tablice ako ne postoje
     app.run(host="0.0.0.0", port=5000)

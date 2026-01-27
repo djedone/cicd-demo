@@ -13,18 +13,27 @@ class CICDUser(HttpUser):
     def check_health(self):
         self.client.get("/health")
     
-    @task(1)
+    @task(2)
     def get_deployments(self):
         self.client.get("/api/deployments")
     
     @task(1)
+    def get_stats(self):
+        self.client.get("/api/stats")
+    
+    @task(1)
+    def get_custom_metrics(self):
+        self.client.get("/api/metrics/custom")
+    
+    @task(1)
     def create_deployment(self):
-        versions = ["1.0.0", "1.0.1", "1.1.0", "2.0.0"]
-        statuses = ["success", "failed", "pending"]
+        versions = ["1.0.0", "1.0.1", "1.1.0", "2.0.0", "2.1.0"]
+        environments = ["staging", "production", "development"]
         self.client.post("/api/deployments", json={
             "version": random.choice(versions),
-            "status": random.choice(statuses),
-            "user": f"user{random.randint(1, 100)}",
-            "commit_hash": f"abc{random.randint(100, 999)}",
-            "environment": random.choice(["staging", "production"])
+            "environment": random.choice(environments)
         })
+    
+    @task(1)
+    def get_metrics(self):
+        self.client.get("/metrics")

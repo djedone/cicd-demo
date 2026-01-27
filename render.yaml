@@ -1,0 +1,76 @@
+# Render Configuration for CI/CD Demo
+services:
+  # Production Service
+  - type: web
+    name: cicd-demo-prod
+    env: docker
+    dockerfilePath: ./dockerfile
+    dockerContext: .
+    plan: starter
+    region: oregon
+    healthCheckPath: /health
+    healthCheckTimeout: 100
+    autoDeploy: false
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cicd-demo-prod-db
+          property: connectionString
+      - key: ENABLE_METRICS
+        value: true
+      - key: SECRET_KEY
+        generateValue: true
+
+  # Staging Service
+  - type: web
+    name: cicd-demo-staging
+    env: docker
+    dockerfilePath: ./dockerfile
+    dockerContext: .
+    plan: starter
+    region: oregon
+    healthCheckPath: /health
+    healthCheckTimeout: 100
+    autoDeploy: true
+    envVars:
+      - key: ENVIRONMENT
+        value: staging
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cicd-demo-staging-db
+          property: connectionString
+      - key: ENABLE_METRICS
+        value: true
+      - key: SECRET_KEY
+        generateValue: true
+
+  # Production Database
+  - type: pserv
+    name: cicd-demo-prod-db
+    plan: starter
+    region: oregon
+    databaseName: cicd_demo
+    user: cicd_demo_user
+    ipAllowList: []
+
+  # Staging Database
+  - type: pserv
+    name: cicd-demo-staging-db
+    plan: starter
+    region: oregon
+    databaseName: cicd_demo_staging
+    user: cicd_demo_user
+    ipAllowList: []
+
+# Environment Groups
+environments:
+  production:
+    services:
+      - cicd-demo-prod
+      - cicd-demo-prod-db
+  staging:
+    services:
+      - cicd-demo-staging
+      - cicd-demo-staging-db
