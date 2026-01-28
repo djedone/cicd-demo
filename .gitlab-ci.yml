@@ -18,8 +18,9 @@ test:
   image: python:3.9-slim
   before_script:
     - apt-get update -y && apt-get install -y gcc python3-dev
-    - python -m pip install --upgrade pip --root-user-action=ignore
-    - pip install --root-user-action=ignore -r requirements.txt
+    - export PATH="/root/.local/bin:$PATH"
+    - python -m pip install --upgrade pip --root-user-action=ignore --no-warn-script-location
+    - pip install --root-user-action=ignore --no-warn-script-location -r requirements.txt
   script:
     - python -m pytest --cov=app --cov-report=xml --cov-report=term-missing
   coverage: '/TOTAL.*\s+(\d+%)$/'
@@ -38,8 +39,9 @@ security:
   image: python:3.9-slim
   before_script:
     - apt-get update -y && apt-get install -y gcc python3-dev
-    - python -m pip install --upgrade pip --root-user-action=ignore
-    - pip install --root-user-action=ignore bandit safety
+    - export PATH="/root/.local/bin:$PATH"
+    - python -m pip install --upgrade pip --root-user-action=ignore --no-warn-script-location
+    - pip install --root-user-action=ignore --no-warn-script-location bandit safety
   script:
     - bandit -r app/ -f json -o bandit-report.json || true
     - safety check --json --output safety-report.json || true
