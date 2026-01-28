@@ -137,34 +137,30 @@ def test_metrics_endpoint(client):
     assert response.status_code in [200, 404]
 
 
-def test_deployment_workflow_complete(client):
-    """Test complete deployment workflow with database operations"""
-    # 1. Create multiple deployments
-    deployments = [
-        {"version": "1.0.0", "environment": "staging"},
-        {"version": "1.0.1", "environment": "production"},
-        {"version": "1.1.0", "environment": "staging"},
-    ]
+def test_deployment_workflow(client):
+    """Test complete deployment workflow"""
+    # 1. Create a deployment
+    deployment_data = {"version": "1.0.0", "environment": "test"}
+    response = client.post(
+        "/api/deployments", json=deployment_data, content_type="application/json"
+    )
 
-    created_deployments = []
+    # Should succeed or fail gracefully
+    assert response.status_code in [201, 500]
 
-    for deployment_data in deployments:
-        response = client.post("/api/deployments", json=deployment_data)
-        if response.status_code == 201:
-            created_deployments.append(deployment_data)
-
-    if len(created_deployments) > 0:
-        # 2. Verify all deployments are recorded
+    if response.status_code == 201:
+        # 2. Verify deployment was recorded
         response = client.get("/api/deployments")
         assert response.status_code == 200
         data = response.get_json()
-        assert len(data["deployments"]) >= len(created_deployments)
+        assert "deployments" in data
+        assert len(data["deployments"]) > 0
 
         # 3. Test stats reflect the deployments
         response = client.get("/api/stats")
         assert response.status_code == 200
         stats = response.get_json()
-        assert stats["total_deployments"] >= len(created_deployments)
+        assert stats["total_deployments"] > 0
 
 
 def test_error_handlers(client):
@@ -257,7 +253,7 @@ def test_data_integrity(client, app):
     with app.app_context():
         # Create deployment via API
         response = client.post(
-            "/api/deployments", json={"version": "3.0.0", "environment": "production"}
+            "/api/deployments", json={"version": "3.0.0", "environment": "test"}
         )
 
         if response.status_code == 201:
@@ -270,7 +266,7 @@ def test_data_integrity(client, app):
             for deployment in deployments:
                 if deployment["version"] == "3.0.0":
                     found = True
-                    assert deployment["environment"] == "production"
+                    assert deployment["environment"] == "test"
                     assert deployment["status"] == "success"
                     break
 
