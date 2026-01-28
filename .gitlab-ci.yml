@@ -83,7 +83,7 @@ deploy_staging:
     - develop
   environment:
     name: staging
-    url: https://your-staging-app.onrender.com
+    url: https://cicd-demo-staging-1s8u.onrender.com/
 
 deploy_production:
   stage: deploy
@@ -102,5 +102,5 @@ deploy_production:
     - main
   environment:
     name: production
-    url: https://your-production-app.onrender.com
+    url: https://cicd-demo-e71o.onrender.com/
   when: manual
