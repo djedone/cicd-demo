@@ -16,9 +16,14 @@ jobs:
       - name: Deploy to Staging
         run: |
           echo "Deploying to staging environment..."
-          # Ovdje možeš dodati curl za Render deploy hook
-          # ili koristiti Render CLI
-          curl -X POST ${{ secrets.RENDER_STAGING_DEPLOY_HOOK }}
+          if [ -n "${{ secrets.RENDER_STAGING_DEPLOY_HOOK }}" ]; then
+            echo "Triggering Render staging deployment..."
+            curl -X POST "${{ secrets.RENDER_STAGING_DEPLOY_HOOK }}"
+          else
+            echo "RENDER_STAGING_DEPLOY_HOOK secret not configured"
+            echo "Please configure the deploy hook in GitHub repository secrets"
+            echo "Deployment will be skipped but pipeline continues"
+          fi
 
   deploy-production:
     if: github.ref == 'refs/heads/main'
@@ -31,8 +36,16 @@ jobs:
         with:
           secret: ${{ github.TOKEN }}
           approvers: ${{ secrets.APPROVERS }}
+          minimum-approvers: 1
           
       - name: Deploy to Production
         run: |
           echo "Deploying to production environment..."
-          curl -X POST ${{ secrets.RENDER_PROD_DEPLOY_HOOK }}
+          if [ -n "${{ secrets.RENDER_PROD_DEPLOY_HOOK }}" ]; then
+            echo "Triggering Render production deployment..."
+            curl -X POST "${{ secrets.RENDER_PROD_DEPLOY_HOOK }}"
+          else
+            echo "RENDER_PROD_DEPLOY_HOOK secret not configured"
+            echo "Please configure the deploy hook in GitHub repository secrets"
+            echo "Deployment will be skipped but pipeline continues"
+          fi

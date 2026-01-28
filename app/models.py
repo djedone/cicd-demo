@@ -1,6 +1,8 @@
 # app/models.py
-from .database import db
 from datetime import datetime
+
+from .database import db
+
 
 class DeploymentLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -9,15 +11,15 @@ class DeploymentLog(db.Model):
     status = db.Column(db.String(20), nullable=False)  # success, failed, pending
     user = db.Column(db.String(100))
     commit_hash = db.Column(db.String(40))
-    environment = db.Column(db.String(20), default='production')
-    
+    environment = db.Column(db.String(20), default="production")
+
     def to_dict(self):
         return {
-            'id': self.id,
-            'version': self.version,
-            'deployed_at': self.deployed_at.isoformat() if self.deployed_at else None,
-            'status': self.status,
-            'user': self.user,
-            'commit_hash': self.commit_hash,
-            'environment': self.environment
+            "id": self.id,
+            "version": self.version,
+            "deployed_at": self.deployed_at.isoformat() if self.deployed_at else None,
+            "status": self.status,
+            "user": self.user,
+            "commit_hash": self.commit_hash,
+            "environment": self.environment,
         }
