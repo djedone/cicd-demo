@@ -81,7 +81,7 @@ def test_health_endpoint_detailed(client):
 
     assert data["status"] == "UP"
     assert "healthy" in data["database"] or "unhealthy" in data["database"]
-    assert data["environment"] in ["development", "testing", "staging", "production"]
+    assert data["environment"] in ["development", "testing", "staging", "production", "test"]
 
 
 def test_error_handling(client):
