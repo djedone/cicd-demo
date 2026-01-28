@@ -1,52 +1,38 @@
-# CI/CD Demo
+# Master Thesis Demo
 
-Master's thesis project demonstrating CI/CD pipeline with multi-environment deployment, security scanning, and monitoring.
+This repository contains the demonstration application for my Master's Thesis, showcasing CI/CD practices.
 
-## Architecture
+## Features
 
-### Application
 - Flask web application with REST API
 - PostgreSQL database with SQLAlchemy ORM
-- Real-time dashboard with metrics
-- Deployment logging system
-- Prometheus metrics integration
+- Docker-based deployment
+- Basic monitoring with Prometheus
 
-### CI/CD Pipeline
-- Multi-stage Docker builds
-- Automated testing with pytest
-- Security scanning (Bandit, Safety, Trivy)
-- Multi-environment deployment (staging/production)
-- Performance testing with Locust
+## Quick Start
 
-### Monitoring
-- Prometheus metrics collection
-- Grafana dashboards
-- Custom alerting rules
-- Structured logging
-- Health check endpoints
+1. Clone the repository
+2. Set up environment variables in `.env`
+3. Run with Docker:
+   ```bash
+   docker-compose up --build
+   ```
 
-## API Endpoints
+## Development
 
-### Core
-- `GET /` - Dashboard interface
-- `GET /health` - System health check
-- `GET /metrics` - Prometheus metrics
+```bash
+# Install dependencies
+pip install -r requirements.txt
 
-### Deployment
-- `GET /api/deployments` - List deployments
-- `POST /api/deployments` - Create deployment
-  ```json
-  {
-    "version": "1.0.0",
-    "environment": "production"
-  }
-  ```
+# Run locally
+python -m flask run
+```
 
-### Analytics
-- `GET /api/stats` - Basic statistics
-- `GET /api/metrics/custom` - Detailed analytics
+## Testing
 
-## Installation
+```bash
+pytest
+```
 
 ### Local Development
 
@@ -221,11 +207,7 @@ cicd-demo/
    - Safety dependency check
    - Trivy container scan
 
-3. **Performance Testing**
-   - Locust load tests
-   - Performance benchmarks
-
-4. **Deployment**
+3. **Deployment**
    - Docker build
    - Staging deploy (develop branch)
    - Production deploy (main branch with approval)
@@ -234,31 +216,6 @@ cicd-demo/
 - `main` → Production
 - `develop` → Staging
 - `feature/*` → No deployment
-
-## Troubleshooting
-
-### Database Connection
-```bash
-python3 scripts/simple_db_test.py
-```
-
-### Application Logs
-```bash
-docker-compose logs app
-```
-
-### Health Check
-```bash
-curl http://localhost:5000/health
-```
-
-## Performance Metrics
-
-- Build time: ~2 minutes
-- Test coverage: >80%
-- Response time: <100ms (health)
-- Memory usage: <500MB
-- Success rate: >95%
 
 ## License
 
