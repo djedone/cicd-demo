@@ -9,9 +9,10 @@ prometheus-flask-exporter==0.22.4
 pytest==7.4.3
 pytest-cov==4.1.0
 bandit==1.7.5
-safety==2.3.5
+safety==3.0.1
 locust==2.17.0
 flake8==6.1.0
 pylint==3.0.3
 black==23.12.1
 isort==5.13.2
+packaging==23.2
