@@ -1,0 +1,37 @@
+stages:
+  - test
+  - deploy
+
+variables:
+  POSTGRES_DB: test_db
+  POSTGRES_USER: test_user
+  POSTGRES_PASSWORD: test_password
+  POSTGRES_HOST_AUTH_METHOD: trust
+
+services:
+  - postgres:15.3
+
+test:
+  stage: test
+  image: python:3.9-slim
+  before_script:
+    - apt-get update -y && apt-get install -y gcc python3-dev
+    - pip install -r requirements.txt
+  script:
+    - python -m pytest -v
+  only:
+    - main
+    - merge_requests
+
+deploy:
+  stage: deploy
+  image: python:3.9-slim
+  before_script:
+    - apt-get update -y && apt-get install -y curl
+    - curl -s https://cli-assets.heroku.com/install.sh | sh
+  script:
+    - heroku container:login
+    - heroku container:push web -a $HEROKU_APP_NAME
+    - heroku container:release web -a $HEROKU_APP_NAME
+  only:
+    - main
