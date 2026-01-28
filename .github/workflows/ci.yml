@@ -46,7 +46,32 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # 4. Run security checks
+      # 4. Linter checks - Flake8
+      - name: Linter checks - Flake8
+        run: |
+          flake8 --version
+          flake8 app/ tests/ scripts/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 app/ tests/ scripts/ --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
+
+      # 5. Linter checks - Pylint
+      - name: Linter checks - Pylint
+        run: |
+          pylint --version
+          pylint app/ tests/ scripts/ --disable=C0114,C0115,R0903 || true  # Don't fail on warnings
+
+      # 6. Code formatting check - Black
+      - name: Code formatting check - Black
+        run: |
+          black --version
+          black --check app/ tests/ scripts/
+
+      # 7. Import sorting check - isort
+      - name: Import sorting check - isort
+        run: |
+          isort --version
+          isort --check-only app/ tests/ scripts/
+
+      # 8. Run security checks
       - name: Run Bandit SAST
         run: |
           pip install bandit
@@ -57,26 +82,26 @@ jobs:
           pip install safety
           safety check --json --output safety-report.json || true
 
-      # 5. Run automated functional tests
+      # 9. Run automated functional tests
       - name: Run automated tests
         env:
           DATABASE_URL: postgresql://test_user:test_pass@localhost:5432/cicd_demo_test
         run: |
           python -m pytest --cov=app --cov-report=xml
 
-      # 6. Upload coverage to Codecov
+      # 10. Upload coverage to Codecov
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
           file: ./coverage.xml
           flags: unittests
 
-      # 7. Build Docker image
+      # 11. Build Docker image
       - name: Build Docker image
         run: |
           docker build -t cicd-demo:${{ github.sha }} .
 
-      # 8. Security scan of Docker image
+      # 12. Security scan of Docker image
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
@@ -86,7 +111,7 @@ jobs:
           ignore-unfixed: true
           exit-code: 1
 
-      # 9. Run performance tests (Locust)
+      # 13. Run performance tests (Locust)
       - name: Run performance tests
         run: |
           pip install locust
