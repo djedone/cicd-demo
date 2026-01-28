@@ -18,10 +18,10 @@ test:
   image: python:3.9-slim
   before_script:
     - apt-get update -y && apt-get install -y gcc python3-dev
-    - python -m pip install --upgrade pip
-    - pip install -r requirements.txt
+    - python -m pip install --upgrade pip --root-user-action=ignore
+    - pip install --root-user-action=ignore -r requirements.txt
   script:
-    - python -m pytest --cov=app --cov-report=xml
+    - python -m pytest --cov=app --cov-report=xml --cov-report=term-missing
   coverage: '/TOTAL.*\s+(\d+%)$/'
   artifacts:
     reports:
@@ -38,8 +38,8 @@ security:
   image: python:3.9-slim
   before_script:
     - apt-get update -y && apt-get install -y gcc python3-dev
-    - python -m pip install --upgrade pip
-    - pip install bandit safety
+    - python -m pip install --upgrade pip --root-user-action=ignore
+    - pip install --root-user-action=ignore bandit safety
   script:
     - bandit -r app/ -f json -o bandit-report.json || true
     - safety check --json --output safety-report.json || true
